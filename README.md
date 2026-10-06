@@ -33,13 +33,18 @@ Versão publicada: **https://joaolague.github.io/torres3d/** (GitHub Pages, bran
 
 ### Relevo
 
-O relevo já vem no repositório: `data/terrain.json`, gerado a partir do Copernicus DEM GLO-30 (30 m), em grade de 25 m. Sem esse arquivo, o app tenta baixar o DEM de 90 m pela Open-Meteo e, se não conseguir, usa um relevo procedural aproximado.
+O relevo já vem no repositório (`data/terrain.json` + `data/terrain.bin` + `data/imagery.jpg`), em grade de 10 m:
+
+- elevação do Copernicus DEM GLO-30 (30 m, interpolada bilinearmente);
+- linha de costa, canal do Mampituba, molhes e lagoas a partir de uma imagem Sentinel-2 sem nuvens (25/09/2026), pelos índices de água MNDWI/NDWI (10–20 m);
+- textura em cor real da mesma imagem. Sem esse arquivo, o app tenta baixar o DEM de 90 m pela Open-Meteo e, se não conseguir, usa um relevo procedural aproximado.
 
 Para regenerar o relevo ou usar um MDT melhor (LiDAR, drone):
 
 ```bash
-pip install numpy rasterio pyproj
-python tools/build_terrain.py                              # Copernicus 30 m (AWS Open Data)
+pip install numpy rasterio pyproj scipy pillow
+python tools/build_terrain.py --s2-scene S2C_22JFN_20260925_0_L2A --dx 10   # versão publicada
+python tools/build_terrain.py                              # só Copernicus 30 m, grade de 25 m
 python tools/build_terrain.py --geotiff mdt_torres.tif --dx 10
 python tools/build_terrain.py --source openmeteo --dx 75   # sem rasterio; lento (limite da API gratuita)
 ```
@@ -68,7 +73,7 @@ Escolhas e limitações, para deixar claro em qualquer apresentação:
 3. A refração assume isóbatas paralelas e localmente retas. Não há difração atrás dos promontórios nem da Ilha dos Lobos, nem correntes de retorno. Isso exige um modelo espectral costeiro (SWAN) ou de fase resolvida (SWASH, FUNWAVE). Ver o roadmap.
 4. O vento vem da interpolação de modelos globais (resolução de ~10–25 km). O efeito do relevo é só cinemático.
 5. A confiança mede só a concordância entre modelos globais; não inclui o erro da transformação costeira nem o estado dos bancos de areia. Com um único modelo disponível, aparece como "n/d".
-6. Os morros e a barra do Mampituba foram posicionados a partir do DEM. Os nomes das praias e a Ilha dos Lobos (ausente no DEM e inserida como feição simplificada) têm posição aproximada.
+6. Nomes das praias e morros posicionados com pontos de controle do Sentinel-2 (precisão de ~30–50 m). A Ilha dos Lobos não aparece no DEM nem na máscara (fica coberta de espuma) e é inserida como feição simplificada; os molhes também são desenhados à parte, alinhados ao canal.
 7. O Copernicus DEM é um modelo de superfície (DSM): prédios e vegetação aparecem como relevo.
 
 ## Validação e calibração
@@ -112,6 +117,7 @@ O código está sob licença MIT (ver `LICENSE`). Os dados têm licenças própr
 |---|---|---|
 | [Open-Meteo](https://open-meteo.com) (Marine, Forecast, Elevation) | Ondas, nível do mar, vento, MDT | CC BY 4.0. Gratuita para uso não comercial; uso comercial requer plano pago |
 | Copernicus DEM GLO-30 / GLO-90 (© DLR e Airbus, Copernicus) | Relevo | Licença Copernicus DEM, livre com atribuição |
+| Copernicus Sentinel-2 L2A (via AWS Open Data) | Linha de costa e textura | Livre; atribuição: "Contains modified Copernicus Sentinel data 2026" |
 | [three.js](https://threejs.org) | Motor 3D | MIT |
 
 Nesta fase o projeto não tem custo. Para comercializar: assinar o plano comercial da Open-Meteo ou montar o pipeline próprio da fase 4 (os dados NOAA, ECMWF Open Data e Copernicus Marine são gratuitos, mas exigem um servidor de ~US$ 50–300/mês).

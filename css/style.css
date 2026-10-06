@@ -45,7 +45,8 @@ select option { background: var(--panel-solid); }
   text-shadow: 0 0 3px #000, 0 0 6px rgba(0, 0, 0, 0.8); letter-spacing: 0.01em; }
 .label::after { content: ""; display: block; width: 5px; height: 5px; margin: 3px auto 0; border-radius: 50%; background: #fff; box-shadow: 0 0 3px #000; }
 .label.headland { font-style: italic; font-weight: 500; color: #f3e6cf; }
-.label.island { font-style: italic; font-weight: 500; }
+.label.island, .label.lake { font-style: italic; font-weight: 500; }
+.label.lake { color: #cfe8ff; }
 
 /* brand */
 #brand { position: fixed; top: 10px; left: 10px; z-index: 10; display: flex; gap: 8px; align-items: center; }

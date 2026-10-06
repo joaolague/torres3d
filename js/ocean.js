@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { MAX_COMPONENTS, PHASE_LUT } from './spectrum.js';
 import { DOMAIN, NHAT, THAT, coastToEN } from './geo.js';
-import { DEAN_A, GRID_DX } from './terrain.js';
+import { DEAN_A, GRID_DX, OCEAN_X0 } from './terrain.js';
 
 const vertexShader = /* glsl */ `
 #define MAXC ${MAX_COMPONENTS}
@@ -216,7 +216,7 @@ void main() {
 `;
 
 export function createOcean(terrain, depthTex, phaseTex, spacing) {
-  const xa = -400, xb = DOMAIN.x1, ya = DOMAIN.y0, yb = DOMAIN.y1;
+  const xa = OCEAN_X0, xb = DOMAIN.x1, ya = DOMAIN.y0, yb = DOMAIN.y1;
   const nx = Math.round((xb - xa) / spacing) + 1;
   const ny = Math.round((yb - ya) / spacing) + 1;
   const pos = new Float32Array(nx * ny * 3);

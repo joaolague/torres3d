@@ -136,11 +136,38 @@ async function loadTerrainJSON() {
   if (!r.ok) throw new Error('no terrain.json');
   const j = await r.json();
   const g = j.grid;
-  const elev = Float32Array.from(j.elevation);
+  let elev;
+  if (j.elevation_bin) {
+    const b = await fetch('data/' + j.elevation_bin, { cache: 'no-cache' });
+    if (!b.ok) throw new Error('no ' + j.elevation_bin);
+    const raw = new Int16Array(await b.arrayBuffer());
+    elev = new Float32Array(raw.length);
+    for (let k = 0; k < raw.length; k++) elev[k] = raw[k] * (j.elevation_scale || 0.1);
+  } else {
+    elev = Float32Array.from(j.elevation);
+  }
+  let rgb = null;
+  if (j.imagery) {
+    try { rgb = await loadImagery('data/' + j.imagery, g.nx, g.ny); } catch (err) { console.warn('imagery unavailable', err); }
+  }
   return {
     source: j.source || 'terrain.json',
+    grid: g,
+    rgb,
     sample: (x, y) => bilinear(elev, g.nx, g.ny, (x - g.x0) / g.dx, (y - g.y0) / g.dy),
   };
+}
+
+// True-colour texture aligned with the grid (row 0 = southern edge y0)
+async function loadImagery(url, nx, ny) {
+  const img = new Image();
+  img.src = url;
+  await img.decode();
+  const cv = document.createElement('canvas');
+  cv.width = nx; cv.height = ny;
+  const g = cv.getContext('2d', { willReadFrequently: true });
+  g.drawImage(img, 0, 0, nx, ny);
+  return g.getImageData(0, 0, nx, ny).data;
 }
 
 async function fetchOpenMeteoDEM(onProgress) {
@@ -195,17 +222,26 @@ async function fetchOpenMeteoDEM(onProgress) {
 // ---------------------------------------------------------------- build
 
 // Small features below DEM resolution: Ilha dos Lobos and the Mampituba jetties.
+const JETTY = { bearing: 95, halfGap: 45, length: 420, halfWidth: 7, height: 3.2 };
 function addSmallFeatures(x, y, e) {
   const isl = LANDMARKS.find((l) => l.kind === 'island');
   const [xi, yi] = lonLatToCoast(isl.lon, isl.lat);
-  const dx = (x - xi) / 55, dy = (y - yi) / 110;
+  const dx = (x - xi) / 45, dy = (y - yi) / 80;
   const r2 = dx * dx + dy * dy;
   if (r2 < 1) e = Math.max(e, 9 * (1 - r2) + 0.6);
 
+  // two parallel jetties ending at the river-mouth landmark, running inland along the channel
   const river = LANDMARKS.find((l) => l.kind === 'river');
-  const [xr, yr] = lonLatToCoast(river.lon, river.lat);
-  for (const off of [-55, 55]) {
-    if (Math.abs(y - (yr + off)) < 9 && x > xr - 120 && x < xr + 330) e = Math.max(e, 3.2);
+  const [te, tn] = coastToEN(...lonLatToCoast(river.lon, river.lat));
+  const [pe, pn] = coastToEN(x, y);
+  const b = (JETTY.bearing * Math.PI) / 180;
+  const de = Math.sin(b), dn = Math.cos(b);
+  const along = (pe - te) * de + (pn - tn) * dn;      // <0 inland of the tip
+  const across = -(pe - te) * dn + (pn - tn) * de;
+  if (along <= 0 && along > -JETTY.length) {
+    for (const off of [-JETTY.halfGap, JETTY.halfGap]) {
+      if (Math.abs(across - off) < JETTY.halfWidth) e = Math.max(e, JETTY.height);
+    }
   }
   return e;
 }
@@ -226,7 +262,8 @@ export async function buildTerrain(onStatus) {
   }
   onStatus?.('Calculando batimetria…');
 
-  const dx = GRID_DX;
+  // use the source grid when it is finer than the default (e.g. 10 m with Sentinel-2)
+  const dx = src.grid && src.grid.dx < GRID_DX && src.grid.x0 === DOMAIN.x0 && src.grid.y0 === DOMAIN.y0 ? src.grid.dx : GRID_DX;
   const nx = Math.round((DOMAIN.x1 - DOMAIN.x0) / dx) + 1;
   const ny = Math.round((DOMAIN.y1 - DOMAIN.y0) / dx) + 1;
   const raw = new Float32Array(nx * ny);
@@ -280,8 +317,11 @@ export async function buildTerrain(onStatus) {
   shoreXs.sort((a, b) => a - b);
   const xShore = shoreXs[Math.floor(shoreXs.length / 2)];
 
+  const rgb = src.rgb && src.grid.nx === nx && src.grid.ny === ny ? src.rgb : null;
+  const rawWater = new Uint8Array(nx * ny);
+  for (let k = 0; k < nx * ny; k++) rawWater[k] = raw[k] <= SEA_LEVEL_THRESHOLD ? 1 : 0;
   const t = {
-    source: src.source, nx, ny, dx, x0: DOMAIN.x0, y0: DOMAIN.y0,
+    source: src.source, nx, ny, dx, x0: DOMAIN.x0, y0: DOMAIN.y0, rgb, rawWater,
     elev, depth, ocean, distToOcean, distToLand, xShore,
     elevAt: (x, y) => bilinear(elev, nx, ny, (x - DOMAIN.x0) / dx, (y - DOMAIN.y0) / dx),
     depthAt: (x, y) => bilinear(depth, nx, ny, (x - DOMAIN.x0) / dx, (y - DOMAIN.y0) / dx),
@@ -302,6 +342,10 @@ export function coastToWorld(x, y, h) {
   return new THREE.Vector3(e, h, -n);
 }
 
+// Inland water (river channel and lagoons beyond the ocean mesh) is drawn flat with its
+// satellite colour; the animated ocean surface only covers x >= OCEAN_X0.
+export const OCEAN_X0 = -400;
+
 export function createTerrainMesh(t) {
   const { nx, ny, dx } = t;
   const pos = new Float32Array(nx * ny * 3);
@@ -316,12 +360,19 @@ export function createTerrainMesh(t) {
     for (let i = 0; i < nx; i++) {
       const k = j * nx + i;
       const x = t.x0 + i * dx, y = t.y0 + j * dx;
-      const h = t.elev[k];
+      let h = t.elev[k];
+      const inland = t.rgb && t.rawWater[k] && (!t.ocean[k] || x < OCEAN_X0);
+      if (inland) h = 0.05;
       const [e, n] = coastToEN(x, y);
       pos[3 * k] = e; pos[3 * k + 1] = h; pos[3 * k + 2] = -n;
 
-      if (t.ocean[k]) {
+      if (inland) {
+        c.setRGB(t.rgb[4 * k] / 255, t.rgb[4 * k + 1] / 255, t.rgb[4 * k + 2] / 255, THREE.SRGBColorSpace);
+      } else if (t.ocean[k]) {
         c.copy(seabed).lerp(deepBed, smoothstep(0, 20, t.depth[k]));
+      } else if (t.rgb) {
+        // Sentinel-2 true colour, slightly brightened to survive the tone mapping
+        c.setRGB(Math.min(1, t.rgb[4 * k] / 255 * 1.25), Math.min(1, t.rgb[4 * k + 1] / 255 * 1.25), Math.min(1, t.rgb[4 * k + 2] / 255 * 1.25), THREE.SRGBColorSpace);
       } else {
         const ex = t.elev[Math.min(k + 1, nx * ny - 1)] - t.elev[Math.max(k - 1, 0)];
         const ey = t.elev[Math.min(k + nx, nx * ny - 1)] - t.elev[Math.max(k - nx, 0)];
@@ -342,18 +393,19 @@ export function createTerrainMesh(t) {
     }
   }
 
-  const idx = [];
+  const idx = new Uint32Array((nx - 1) * (ny - 1) * 6);
+  let m = 0;
   for (let j = 0; j < ny - 1; j++) {
     for (let i = 0; i < nx - 1; i++) {
       const a = j * nx + i, b = a + 1, cc = a + nx, d = cc + 1;
       // counter-clockwise seen from above (coast frame has the same orientation as EN)
-      idx.push(a, b, cc, b, d, cc);
+      idx[m++] = a; idx[m++] = b; idx[m++] = cc; idx[m++] = b; idx[m++] = d; idx[m++] = cc;
     }
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  geo.setIndex(idx);
+  geo.setIndex(new THREE.BufferAttribute(idx, 1));
   geo.computeVertexNormals();
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
   const mesh = new THREE.Mesh(geo, mat);
