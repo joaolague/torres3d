@@ -1,22 +1,19 @@
 // Terrain + synthetic bathymetry for the Torres domain.
 //
-// Elevation source, in order of preference:
-//   1. data/terrain.json (built offline by tools/build_terrain.py)
-//   2. Open-Meteo Elevation API (Copernicus DEM GLO-90), fetched in the browser and cached
-//   3. Procedural approximation built from the landmarks in geo.js
+// Elevation source: data/terrain.json (+ terrain.bin, imagery.jpg), built offline by
+// tools/build_terrain.py; a procedural approximation from geo.js if it cannot be loaded.
+// (No in-browser DEM download: thousands of points exhaust the Open-Meteo free quota.)
 // Bathymetry is synthetic: an equilibrium (Dean) profile h = A * d^(2/3), where d is the
 // distance to the nearest non-ocean cell. Replace with GEBCO / DHN nautical charts / survey.
 
 import * as THREE from 'three';
-import { DOMAIN, LANDMARKS, lonLatToCoast, coastToLonLat, coastToEN } from './geo.js';
+import { DOMAIN, LANDMARKS, lonLatToCoast, coastToEN } from './geo.js';
 
 export const GRID_DX = 25; // working grid spacing (m)
 export const DEAN_A = 0.10; // Dean parameter (m^1/3), fine-medium sand
 const MAX_DEPTH = 35;
 const SEA_LEVEL_THRESHOLD = 0.5; // DEM cells at or below this are candidate sea
 
-const DEM_DX = 100; // spacing for in-browser DEM sampling (DEM itself is ~90 m)
-const DEM_CACHE_KEY = 'torres3d-dem-v1';
 
 // ---------------------------------------------------------------- helpers
 
@@ -171,55 +168,6 @@ async function loadImagery(url, nx, ny) {
   return g.getImageData(0, 0, nx, ny).data;
 }
 
-async function fetchOpenMeteoDEM(onProgress) {
-  const nx = Math.round((DOMAIN.x1 - DOMAIN.x0) / DEM_DX) + 1;
-  const ny = Math.round((DOMAIN.y1 - DOMAIN.y0) / DEM_DX) + 1;
-
-  let cached = null;
-  try { cached = JSON.parse(localStorage.getItem(DEM_CACHE_KEY) || 'null'); } catch { /* storage unavailable */ }
-  let elev;
-  if (cached && cached.nx === nx && cached.ny === ny) {
-    elev = Float32Array.from(cached.elevation);
-  } else {
-    const pts = [];
-    for (let j = 0; j < ny; j++) {
-      for (let i = 0; i < nx; i++) {
-        const [lon, lat] = coastToLonLat(DOMAIN.x0 + i * DEM_DX, DOMAIN.y0 + j * DEM_DX);
-        pts.push([lat.toFixed(5), lon.toFixed(5)]);
-      }
-    }
-    elev = new Float32Array(pts.length);
-    const chunks = [];
-    for (let k = 0; k < pts.length; k += 100) chunks.push(k);
-    let done = 0;
-    const worker = async () => {
-      while (chunks.length) {
-        const k0 = chunks.shift();
-        const part = pts.slice(k0, k0 + 100);
-        const url = 'https://api.open-meteo.com/v1/elevation?latitude=' + part.map((p) => p[0]).join(',') +
-          '&longitude=' + part.map((p) => p[1]).join(',');
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 15000);
-        const r = await fetch(url, { signal: ctrl.signal });
-        clearTimeout(timer);
-        if (!r.ok) throw new Error('elevation API ' + r.status);
-        const j = await r.json();
-        j.elevation.forEach((v, m) => { elev[k0 + m] = Number.isFinite(v) ? v : 0; });
-        done++;
-        onProgress?.(done / Math.ceil(pts.length / 100));
-      }
-    };
-    await Promise.all([worker(), worker(), worker(), worker()]);
-    try {
-      localStorage.setItem(DEM_CACHE_KEY, JSON.stringify({ nx, ny, elevation: Array.from(elev, (v) => Math.round(v * 10) / 10) }));
-    } catch { /* quota or private mode */ }
-  }
-  return {
-    source: 'Copernicus DEM GLO-90 (via Open-Meteo)',
-    sample: (x, y) => bilinear(elev, nx, ny, (x - DOMAIN.x0) / DEM_DX, (y - DOMAIN.y0) / DEM_DX),
-  };
-}
-
 // ---------------------------------------------------------------- build
 
 // Small features below DEM resolution: Ilha dos Lobos and the Mampituba jetties.
@@ -250,16 +198,11 @@ function addSmallFeatures(x, y, e) {
 export async function buildTerrain(onStatus) {
   let src = null;
   try {
+    onStatus?.('Carregando relevo…');
     src = await loadTerrainJSON();
-  } catch {
-    try {
-      onStatus?.('Baixando relevo (Copernicus DEM)…');
-      src = await fetchOpenMeteoDEM((p) => onStatus?.(`Baixando relevo (Copernicus DEM)… ${Math.round(p * 100)}%`));
-    } catch (err) {
-      console.warn('DEM unavailable, using procedural terrain:', err);
-      const f = proceduralElevation();
-      src = { source: 'Procedural (aproximação)', sample: f };
-    }
+  } catch (err) {
+    console.warn('terrain.json unavailable, using procedural terrain:', err);
+    src = { source: 'Procedural (aproximação)', sample: proceduralElevation() };
   }
   onStatus?.('Calculando batimetria…');
 

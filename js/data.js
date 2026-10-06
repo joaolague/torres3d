@@ -25,7 +25,11 @@ async function getJSON(url, timeoutMs = 20000) {
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const r = await fetch(url, { signal: ctrl.signal });
-    if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+    if (!r.ok) {
+      const err = new Error(`${r.status} ${await r.text()}`);
+      err.status = r.status;
+      throw err;
+    }
     return await r.json();
   } finally {
     clearTimeout(timer);
@@ -183,29 +187,46 @@ function spreadOf(hours) {
   return s;
 }
 
-export async function fetchForecast(days = 7, onStatus) {
+// Raw Open-Meteo responses: { base, sets: { key: { marine, wind: [9 points] } } }
+async function fetchRaw(days) {
   const pts = windGridPoints();
-  onStatus?.('Baixando previsões (ECMWF, GFS, Météo-France, ICON)…');
   const settled = await Promise.allSettled([
-    fetchMarine(null, days).catch(() => null), // best match: tide and SST
+    fetchMarine(null, days), // best match: tide and SST
     ...MODEL_SETS.map((m) => Promise.all([fetchMarine(m.wave, days), fetchWind(m.wind, pts, days)])),
   ]);
-  const base = settled[0].status === 'fulfilled' ? settled[0].value : null;
-
-  const sets = {};
-  let times = null;
+  const raw = { base: settled[0].status === 'fulfilled' ? settled[0].value : null, sets: {}, rateLimited: false };
+  settled.forEach((r) => { if (r.status === 'rejected' && r.reason?.status === 429) raw.rateLimited = true; });
   MODEL_SETS.forEach((m, i) => {
     const r = settled[i + 1];
-    if (r.status !== 'fulfilled') { console.warn(`Model set ${m.key} unavailable`, r.reason); return; }
-    const [marine, wind] = r.value;
-    times ??= marine.hourly.time;
-    const hours = buildHours(times, marine, wind, pts);
-    if (hours.filter(Boolean).length < hours.length * 0.5) { console.warn(`Model set ${m.key}: too many gaps`); return; }
-    sets[m.key] = hours;
+    if (r.status === 'fulfilled') raw.sets[m.key] = { marine: r.value[0], wind: r.value[1] };
+    else console.warn(`Model set ${m.key} unavailable`, r.reason);
   });
+  return raw;
+}
+
+// Server copy written by GitHub Actions (tools/archive_forecast.py --latest), same raw format
+async function loadSnapshot() {
+  const r = await fetch('data/forecast-latest.json', { cache: 'no-cache' });
+  if (!r.ok) throw new Error('no forecast snapshot');
+  return r.json();
+}
+
+function assemble(raw) {
+  const pts = windGridPoints();
+  const sets = {};
+  let times = null;
+  for (const m of MODEL_SETS) {
+    const r = raw.sets?.[m.key];
+    if (!r?.marine?.hourly || !r?.wind?.length) continue;
+    times ??= r.marine.hourly.time;
+    const hours = buildHours(times, r.marine, r.wind, pts);
+    if (hours.filter(Boolean).length < hours.length * 0.5) { console.warn(`Model set ${m.key}: too many gaps`); continue; }
+    sets[m.key] = hours;
+  }
   const keys = Object.keys(sets);
   if (!keys.length) throw new Error('no forecast model available');
 
+  const base = raw.base;
   const tide = base ? fillGaps(base.hourly.sea_level_height_msl) : null;
   const sst = base ? fillGaps(base.hourly.sea_surface_temperature) : null;
   const tIndex = base ? new Map(base.hourly.time.map((t, k) => [t, k])) : new Map();
@@ -223,7 +244,31 @@ export async function fetchForecast(days = 7, onStatus) {
     hours.push({ time: t, models: per, consensus: cons, spread: spreadOf(avail) });
   });
   if (!hours.length) throw new Error('empty forecast');
-  return { source: 'Open-Meteo: ' + keys.map((k) => MODEL_SETS.find((m) => m.key === k).desc).join(' · '), live: true, available: keys, hours };
+  return { available: keys, hours, label: keys.map((k) => MODEL_SETS.find((m) => m.key === k).desc).join(' · ') };
+}
+
+export async function fetchForecast(days = 7, onStatus) {
+  onStatus?.('Baixando previsões (ECMWF, GFS, Météo-France, ICON)…');
+  let raw = null, liveErr = null;
+  try {
+    raw = await fetchRaw(days);
+    if (Object.keys(raw.sets).length) {
+      const f = assemble(raw);
+      return { ...f, live: true, source: 'Open-Meteo, ao vivo: ' + f.label };
+    }
+  } catch (err) { liveErr = err; }
+
+  // Live download failed (offline, blocked or rate-limited): use the server copy
+  onStatus?.('Open-Meteo indisponível; carregando cópia do servidor…');
+  const snap = await loadSnapshot();
+  const f = assemble(snap);
+  const when = new Date(snap.issued_utc.replace('Z', ':00Z'));
+  const reason = raw?.rateLimited ? 'limite de requisições da Open-Meteo atingido no seu navegador' : 'Open-Meteo inacessível no seu navegador';
+  return {
+    ...f, live: false,
+    source: `Cópia do servidor de ${when.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} (${reason}): ${f.label}`,
+    liveError: liveErr?.message,
+  };
 }
 
 // ------------------------------------------------------------ manual scenarios

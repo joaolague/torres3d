@@ -145,7 +145,7 @@ async function init() {
   } catch (err) {
     console.warn('Forecast unavailable:', err);
     state.mode = 'manual';
-    $('src-data').textContent = 'Previsão indisponível (sem conexão com a Open-Meteo); usando o simulador.';
+    $('src-data').textContent = 'Previsão indisponível (Open-Meteo e cópia do servidor inacessíveis); usando o simulador.';
   }
   buildModelPicker();
   buildDays();
@@ -191,7 +191,7 @@ function updateDetail(h) {
   $('d-time').textContent = formatTime(h.time);
   const set = MODEL_SETS.find((m) => m.key === state.model);
   $('d-model').textContent = state.mode !== 'live' ? 'Simulador' :
-    set ? set.desc : `Consenso de ${state.forecast.available.length} modelos`;
+    (set ? set.desc : `Consenso de ${state.forecast.available.length} modelos`) + (state.forecast.live ? '' : ' · cópia do servidor');
   $('d-hs').textContent = fmt(w.total.hs);
   $('d-tp').textContent = fmt(w.total.tp, 0);
   $('d-dir').innerHTML = dirTxt(w.total.dir);

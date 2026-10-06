@@ -10,10 +10,16 @@ by model, beach and lead time. Runs in GitHub Actions twice a day; standard libr
 
   python tools/archive_forecast.py            # writes into ./archive
   python tools/archive_forecast.py --hours 96 --out /tmp/archive
+  python tools/archive_forecast.py --latest data/forecast-latest.json
+
+--latest also writes the full 7-day forecast in the exact raw format the web app downloads
+(3 model sets, wind on the app's 3x3 grid). The app falls back to this file when Open-Meteo
+cannot be reached from the visitor's browser (offline, blocked or rate-limited).
 """
 
 import argparse
 import json
+import math
 import time
 import urllib.error
 import urllib.parse
@@ -38,6 +44,26 @@ MARINE_VARS = [
 ]
 MARINE_MIN = ["wave_height", "wave_direction", "wave_period"]
 WIND_VARS = ["wind_speed_10m", "wind_direction_10m", "wind_gusts_10m"]
+
+# App wind grid: 3x3 points over the coast-frame domain, same order as windGridPoints() in js/data.js
+ORIGIN = (-29.347, -49.727)
+COAST_BEARING = 32.0
+DOMAIN = dict(x0=-1500.0, x1=3500.0, y0=-3200.0, y1=4000.0)
+
+
+def wind_grid_points():
+    m_lat = 110850.0
+    m_lon = 111320.0 * math.cos(math.radians(ORIGIN[0]))
+    sea, along = math.radians(COAST_BEARING + 90), math.radians(COAST_BEARING)
+    pts = []
+    for j in range(3):
+        for i in range(3):
+            x = DOMAIN["x0"] + i * (DOMAIN["x1"] - DOMAIN["x0"]) / 2
+            y = DOMAIN["y0"] + j * (DOMAIN["y1"] - DOMAIN["y0"]) / 2
+            e = x * math.sin(sea) + y * math.sin(along)
+            n = x * math.cos(sea) + y * math.cos(along)
+            pts.append((round(ORIGIN[0] + n / m_lat, 4), round(ORIGIN[1] + e / m_lon, 4)))
+    return pts
 
 
 def get_json(url, retries=3):
@@ -69,6 +95,39 @@ def wind_url(model, days):
     return "https://api.open-meteo.com/v1/forecast?" + urllib.parse.urlencode(q)
 
 
+def wind_grid_url(model, days):
+    pts = wind_grid_points()
+    q = {"latitude": ",".join(str(p[0]) for p in pts), "longitude": ",".join(str(p[1]) for p in pts),
+         "hourly": ",".join(WIND_VARS), "wind_speed_unit": "ms", "timezone": TZ, "forecast_days": days, "models": model}
+    return "https://api.open-meteo.com/v1/forecast?" + urllib.parse.urlencode(q, safe=",")
+
+
+def write_latest(path, days=7):
+    """Full forecast in the raw shape js/data.js assembles (marine + 9-point wind per set)."""
+    snap = {"issued_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ"), "sets": {}}
+    full = MARINE_VARS + ["sea_level_height_msl", "sea_surface_temperature"]
+    try:
+        snap["base"] = get_json(marine_url(None, full, days))
+    except Exception as exc:
+        print(f"  base marine failed: {exc}")
+        snap["base"] = None
+    for key, wave_model, wind_model in MODEL_SETS:
+        try:
+            try:
+                marine = get_json(marine_url(wave_model, MARINE_VARS, days))
+            except urllib.error.HTTPError:
+                marine = get_json(marine_url(wave_model, MARINE_MIN, days))
+            wind = get_json(wind_grid_url(wind_model, days))
+            snap["sets"][key] = {"marine": marine, "wind": wind if isinstance(wind, list) else [wind]}
+        except Exception as exc:
+            print(f"  latest {key} failed: {exc}")
+    if not snap["sets"]:
+        raise SystemExit("latest: no model set could be downloaded")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(snap, separators=(",", ":")))
+    print(f"Wrote {path} ({path.stat().st_size / 1024:.0f} kB); sets: {', '.join(snap['sets'])}")
+
+
 def trim(hourly, hours, digits=2):
     """Keep the first `hours` steps; round numbers to shrink the archive."""
     out = {}
@@ -90,7 +149,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--hours", type=int, default=72, help="forecast hours to keep (default 72)")
     ap.add_argument("--out", type=Path, default=Path(__file__).resolve().parents[1] / "archive")
+    ap.add_argument("--latest", type=Path, help="also write the 7-day app snapshot to this path")
     args = ap.parse_args()
+    if args.latest:
+        write_latest(args.latest)
     days = min(16, args.hours // 24 + 1)
 
     now = datetime.now(timezone.utc)
