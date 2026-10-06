@@ -25,7 +25,6 @@ export function windColor(s, out = [0, 0, 0]) {
   }
   return out;
 }
-export const WIND_LEGEND = STOPS.map(([s, c]) => ({ speed: s, color: `rgb(${c.map((v) => Math.round(v * 255)).join(',')})` }));
 
 export class WindField {
   constructor(terrain, count) {

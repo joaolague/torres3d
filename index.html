@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <title>Torres 3D – Ondas e Vento</title>
-  <meta name="description" content="Protótipo open source de visualização 3D de ondas, swell e vento para as praias de Torres (RS).">
+  <meta name="description" content="Visualização 3D open source de ondas, swell e vento para as praias de Torres (RS).">
   <link rel="stylesheet" href="css/style.css">
   <script type="importmap">
     {
@@ -24,73 +24,130 @@
     <div id="loading-msg">Carregando…</div>
   </div>
 
-  <aside id="panel">
-    <button id="panel-toggle" title="Mostrar/ocultar painel">☰</button>
-    <div class="panel-body">
-      <h1>Torres 3D <span>ondas · swell · vento</span></h1>
-
-      <div class="seg">
-        <button id="mode-live" class="active">Previsão ao vivo</button>
-        <button id="mode-manual">Cenário manual</button>
-      </div>
-
-      <section>
-        <h2 id="time-label">–</h2>
-        <table id="waves-table"></table>
-        <p id="wind-readout"></p>
-        <p id="extra-readout" class="muted"></p>
-      </section>
-
-      <section id="manual-panel" class="hidden">
-        <label class="row">Cenário
-          <select id="scenario"></select>
-        </label>
-        <h3>Swell</h3>
-        <label class="row">Hs <input id="m-s1-hs" type="range" min="0" max="5" step="0.1"><span><b id="m-s1-hs-v"></b> m</span></label>
-        <label class="row">Tp <input id="m-s1-tp" type="range" min="5" max="18" step="0.5"><span><b id="m-s1-tp-v"></b> s</span></label>
-        <label class="row">De <input id="m-s1-dir" type="range" min="0" max="360" step="5"><span><b id="m-s1-dir-v"></b>°</span></label>
-        <h3>Mar de vento</h3>
-        <label class="row">Hs <input id="m-ws-hs" type="range" min="0" max="3" step="0.1"><span><b id="m-ws-hs-v"></b> m</span></label>
-        <label class="row">Tp <input id="m-ws-tp" type="range" min="2" max="10" step="0.5"><span><b id="m-ws-tp-v"></b> s</span></label>
-        <label class="row">De <input id="m-ws-dir" type="range" min="0" max="360" step="5"><span><b id="m-ws-dir-v"></b>°</span></label>
-        <h3>Vento e nível</h3>
-        <label class="row">Vel. <input id="m-w-spd" type="range" min="0" max="25" step="0.5"><span><b id="m-w-spd-v"></b> m/s</span></label>
-        <label class="row">De <input id="m-w-dir" type="range" min="0" max="360" step="5"><span><b id="m-w-dir-v"></b>°</span></label>
-        <label class="row">Nível <input id="m-tide" type="range" min="-0.5" max="1.2" step="0.05"><span><b id="m-tide-v"></b> m</span></label>
-      </section>
-
-      <section>
-        <h3>Camadas</h3>
-        <label class="chk"><input id="layer-wind" type="checkbox" checked> Partículas de vento</label>
-        <label class="chk"><input id="layer-hs" type="checkbox"> Mapa de Hs costeiro</label>
-        <label class="chk"><input id="layer-arrows" type="checkbox" checked> Setas de swell</label>
-        <label class="chk"><input id="layer-labels" type="checkbox" checked> Nomes das praias</label>
-        <label class="row">Exagero vertical <input id="exag" type="range" min="1" max="4" step="0.25" value="1.5"><span id="exag-v">1.5×</span></label>
-        <label class="row">Velocidade do vento <input id="wind-speed" type="range" min="1" max="8" step="0.5" value="3"><span id="wind-speed-v">3×</span></label>
-        <label class="row">Qualidade
-          <select id="quality"><option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option></select>
-        </label>
-      </section>
-
-      <section class="muted small">
-        <p><b>Dados:</b> <span id="src-data">–</span></p>
-        <p><b>Relevo:</b> <span id="src-terrain">–</span>. Batimetria sintética (perfil de Dean).</p>
-        <p>Visualização ilustrativa: a superfície é uma realização estatística do espectro previsto, não a previsão de ondas individuais. Não usar para segurança no mar.</p>
-      </section>
+  <!-- top-left: brand + spot selector -->
+  <header id="brand">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 15c2.5 0 2.5-2 5-2s2.5 2 5 2 2.5-2 5-2 2.5 2 5 2M2 19c2.5 0 2.5-2 5-2s2.5 2 5 2 2.5-2 5-2 2.5 2 5 2M7 11c0-3.3 2.7-6 6-6 1.6 0 3 .6 4 1.6"/></svg>
+      <span>TORRES<b>3D</b></span>
     </div>
-  </aside>
+    <label class="spot">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+      <select id="spot" aria-label="Ponto de vista"></select>
+    </label>
+  </header>
 
-  <div id="cameras"></div>
+  <!-- left: forecast detail card -->
+  <section id="detail" class="card">
+    <div class="detail-head">
+      <div>
+        <div id="d-time" class="d-time">–</div>
+        <div id="d-model" class="d-sub">–</div>
+      </div>
+      <button id="detail-toggle" class="icon-btn" aria-label="Recolher">
+        <svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>
+      </button>
+    </div>
+    <div class="detail-body">
+      <div class="big-row">
+        <div class="big"><div><span id="d-hs">–</span><small>m</small></div><em>Hs total</em></div>
+        <div class="big"><div><span id="d-tp">–</span><small>s</small></div><em>Tp</em></div>
+        <div class="big"><div><span id="d-dir" class="dir-cell">–</span></div><em>Direção</em></div>
+      </div>
+      <table id="d-parts"></table>
+      <div class="kv"><span>Vento</span><b id="d-wind">–</b></div>
+      <div class="kv"><span>Rajadas</span><b id="d-gust">–</b></div>
+      <div class="kv"><span>Nível do mar</span><b id="d-tide">–</b></div>
+      <div class="kv"><span>Água</span><b id="d-sst">–</b></div>
+      <div class="conf-row">
+        <span>Confiança</span>
+        <b id="d-conf" class="conf">–</b>
+      </div>
+      <div id="d-spread" class="d-sub"></div>
+    </div>
+  </section>
 
-  <div id="legends">
-    <div id="wind-legend" class="legend"></div>
-    <div id="hs-legend" class="legend hidden"><span class="lg-title">Hs costeiro</span><i class="hs-bar"></i><span>0</span><span>1,5</span><span>3 m</span></div>
+  <!-- right: layer menu (Windy-style) -->
+  <nav id="menu">
+    <button class="m-item active" data-layer="wind">
+      <svg viewBox="0 0 24 24"><path d="M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h8"/></svg><span>Vento</span>
+    </button>
+    <button class="m-item" data-layer="hs">
+      <svg viewBox="0 0 24 24"><path d="M2 12c2.5 0 2.5-3 5-3s2.5 3 5 3 2.5-3 5-3 2.5 3 5 3M2 18c2.5 0 2.5-3 5-3s2.5 3 5 3 2.5-3 5-3 2.5 3 5 3"/></svg><span>Altura de onda</span>
+    </button>
+    <button class="m-item active" data-layer="arrows">
+      <svg viewBox="0 0 24 24"><path d="M4 20L20 4M20 4h-8M20 4v8"/></svg><span>Swell</span>
+    </button>
+    <button class="m-item active" data-layer="labels">
+      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h13"/></svg><span>Nomes</span>
+    </button>
+    <hr>
+    <button class="m-item" id="m-sim">
+      <svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><span>Simulador</span>
+    </button>
+    <button class="m-item" id="m-settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Ajustes</span>
+    </button>
+    <button class="m-item" id="m-info">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg><span>Sobre</span>
+    </button>
+  </nav>
+
+  <!-- popovers -->
+  <section id="sim-panel" class="card pop hidden">
+    <h3>Simulador de cenários</h3>
+    <label class="row">Cenário <select id="scenario"></select></label>
+    <h4>Swell</h4>
+    <label class="row">Hs <input id="m-s1-hs" type="range" min="0" max="5" step="0.1"><span><b id="m-s1-hs-v"></b> m</span></label>
+    <label class="row">Tp <input id="m-s1-tp" type="range" min="5" max="18" step="0.5"><span><b id="m-s1-tp-v"></b> s</span></label>
+    <label class="row">De <input id="m-s1-dir" type="range" min="0" max="360" step="5"><span><b id="m-s1-dir-v"></b>°</span></label>
+    <h4>Mar de vento</h4>
+    <label class="row">Hs <input id="m-ws-hs" type="range" min="0" max="3" step="0.1"><span><b id="m-ws-hs-v"></b> m</span></label>
+    <label class="row">Tp <input id="m-ws-tp" type="range" min="2" max="10" step="0.5"><span><b id="m-ws-tp-v"></b> s</span></label>
+    <label class="row">De <input id="m-ws-dir" type="range" min="0" max="360" step="5"><span><b id="m-ws-dir-v"></b>°</span></label>
+    <h4>Vento e nível</h4>
+    <label class="row">Vel. <input id="m-w-spd" type="range" min="0" max="25" step="0.5"><span><b id="m-w-spd-v"></b> m/s</span></label>
+    <label class="row">De <input id="m-w-dir" type="range" min="0" max="360" step="5"><span><b id="m-w-dir-v"></b>°</span></label>
+    <label class="row">Nível <input id="m-tide" type="range" min="-0.5" max="1.2" step="0.05"><span><b id="m-tide-v"></b> m</span></label>
+    <button id="sim-exit" class="btn">Voltar à previsão</button>
+  </section>
+
+  <section id="settings-panel" class="card pop hidden">
+    <h3>Ajustes</h3>
+    <label class="row">Exagero vertical <input id="exag" type="range" min="1" max="4" step="0.25" value="1.5"><span id="exag-v">1.5×</span></label>
+    <label class="row">Velocidade do vento <input id="wind-speed" type="range" min="1" max="8" step="0.5" value="3"><span id="wind-speed-v">3×</span></label>
+    <label class="row">Qualidade
+      <select id="quality"><option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option></select>
+    </label>
+  </section>
+
+  <section id="info-panel" class="card pop hidden">
+    <h3>Sobre</h3>
+    <p><b>Dados:</b> <span id="src-data">–</span></p>
+    <p><b>Relevo:</b> <span id="src-terrain">–</span>. Batimetria sintética (perfil de Dean).</p>
+    <p><b>Confiança:</b> concordância entre os modelos ECMWF, GFS e Météo-France/ICON para Hs, direção das ondas e vento. Não inclui o erro da transformação costeira.</p>
+    <p class="muted">Visualização ilustrativa: a superfície é uma realização estatística do espectro previsto, não a previsão de ondas individuais. Não usar para segurança no mar.</p>
+    <p class="muted"><a href="https://github.com/joaolague/torres3d" target="_blank" rel="noopener">Código aberto (MIT)</a></p>
+  </section>
+
+  <!-- bottom: legend, model picker, timeline -->
+  <div id="legend" title="Clique para trocar a unidade">
+    <span id="legend-unit">km/h</span>
+    <div id="legend-bar"></div>
   </div>
 
-  <div id="timeline" class="hidden">
-    <button id="play" title="Animar previsão">▶</button>
-    <input id="time-slider" type="range" min="0" max="167" step="1" value="0">
-  </div>
+  <div id="models" class="seg"></div>
+
+  <footer id="timeline">
+    <button id="play" class="icon-btn" aria-label="Animar">
+      <svg viewBox="0 0 24 24" class="i-play"><path d="M8 5l11 7-11 7z"/></svg>
+      <svg viewBox="0 0 24 24" class="i-pause"><path d="M8 5v14M16 5v14"/></svg>
+    </button>
+    <div id="track">
+      <canvas id="meteogram"></canvas>
+      <div id="days"></div>
+      <div id="cursor"><span id="cursor-label">–</span></div>
+    </div>
+  </footer>
 
   <script type="module" src="js/main.js"></script>
 </body>

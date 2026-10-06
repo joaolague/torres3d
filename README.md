@@ -8,7 +8,9 @@ O que aparece na cena:
 
 - Superfície do mar animada, sintetizada a partir das partições previstas (swell primário, swell secundário e mar de vento), com refração, empinamento (shoaling) e arrebentação na costa.
 - Vento em 3D no estilo Windy: partículas transportadas pelo campo previsto, com perfil logarítmico na vertical, rugosidade diferente para mar e terra e soerguimento sobre o relevo.
-- Linha do tempo de 7 dias (hora a hora), nível do mar (maré + componente meteorológica) e temperatura da água.
+- Três conjuntos de modelos (ECMWF WAM + IFS, NOAA GFS-Wave + GFS, Météo-France MFWAM + DWD ICON) e o consenso entre eles, com seletor no estilo Windy.
+- Escala de confiança por hora (alta, média, baixa), calculada a partir da concordância entre os modelos em altura, direção das ondas e vento; o meteograma da linha do tempo mostra a faixa de dispersão de Hs.
+- Linha do tempo de 7 dias (hora a hora) com meteograma, nível do mar (maré + componente meteorológica) e temperatura da água.
 - Modo "cenário manual", com presets (ressaca de sul, nordestão, swell de leste com terral, mar calmo), para demonstrações e estudos de caso.
 - Camadas: mapa de Hs costeiro, setas de swell, nomes das praias, exagero vertical e câmeras pré-definidas (Praia Grande, Guarita, Molhes, Ilha dos Lobos).
 
@@ -63,9 +65,10 @@ Escolhas e limitações, para deixar claro em qualquer apresentação:
 1. A superfície é uma realização estocástica consistente com o espectro previsto, não a previsão de cada onda. É o mesmo raciocínio de uma simulação condicional: as estatísticas (Hs, Tp, direção) são respeitadas e a fase é aleatória.
 2. A batimetria é sintética: um perfil de equilíbrio de Dean com A = 0,10 m^1/3. Ela deve ser substituída por GEBCO, cartas náuticas da DHN ou levantamento batimétrico. É o fator que mais limita a precisão perto da costa.
 3. A refração assume isóbatas paralelas e localmente retas. Não há difração atrás dos promontórios nem da Ilha dos Lobos, nem correntes de retorno. Isso exige um modelo espectral costeiro (SWAN) ou de fase resolvida (SWASH, FUNWAVE). Ver o roadmap.
-4. O vento vem da interpolação de um modelo global (resolução de ~10 km). O efeito do relevo é só cinemático.
-5. Os morros e a barra do Mampituba foram posicionados a partir do DEM. Os nomes das praias e a Ilha dos Lobos (ausente no DEM e inserida como feição simplificada) têm posição aproximada.
-6. O Copernicus DEM é um modelo de superfície (DSM): prédios e vegetação aparecem como relevo.
+4. O vento vem da interpolação de modelos globais (resolução de ~10–25 km). O efeito do relevo é só cinemático.
+5. A confiança mede só a concordância entre modelos globais; não inclui o erro da transformação costeira nem o estado dos bancos de areia. Com um único modelo disponível, aparece como "n/d".
+6. Os morros e a barra do Mampituba foram posicionados a partir do DEM. Os nomes das praias e a Ilha dos Lobos (ausente no DEM e inserida como feição simplificada) têm posição aproximada.
+7. O Copernicus DEM é um modelo de superfície (DSM): prédios e vegetação aparecem como relevo.
 
 ## Estrutura
 
