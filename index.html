@@ -53,6 +53,10 @@
         <div class="big"><div><span id="d-tp">–</span><small>s</small></div><em>Tp</em></div>
         <div class="big"><div><span id="d-dir" class="dir-cell">–</span></div><em>Direção</em></div>
       </div>
+      <div class="surf-row" title="Índice heurístico, ainda não calibrado com observações">
+        <span id="d-surf" class="surf-badge">–</span>
+        <div class="surf-txt"><b id="d-surf-label">Índice de surfe</b><div id="d-surf-sub" class="d-sub"></div></div>
+      </div>
       <table id="d-parts"></table>
       <div class="kv"><span>Vento</span><b id="d-wind">–</b></div>
       <div class="kv"><span>Rajadas</span><b id="d-gust">–</b></div>
@@ -124,6 +128,7 @@
     <h3>Sobre</h3>
     <p><b>Dados:</b> <span id="src-data">–</span></p>
     <p><b>Relevo:</b> <span id="src-terrain">–</span>. Batimetria sintética (perfil de Dean).</p>
+    <p><b>Índice de surfe (v0):</b> estimativa de 0 a 5 para os beach breaks de Torres, a partir da altura de quebra (Komar &amp; Gaughan), período, direção do swell, vento terral/maral e mar de vento. Ainda não calibrado: os pesos serão ajustados com as observações do Diário do Mar.</p>
     <p><b>Confiança:</b> concordância entre os modelos ECMWF, GFS e Météo-France/ICON para Hs, direção das ondas e vento. Não inclui o erro da transformação costeira.</p>
     <p class="muted">Visualização ilustrativa: a superfície é uma realização estatística do espectro previsto, não a previsão de ondas individuais. Não usar para segurança no mar.</p>
     <p class="muted"><a href="https://github.com/joaolague/torres3d" target="_blank" rel="noopener">Código aberto (MIT)</a></p>

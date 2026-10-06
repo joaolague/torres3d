@@ -1,0 +1,135 @@
+"""Archive the Open-Meteo forecasts used by Torres 3D, for later validation.
+
+Each run saves one compact JSON snapshot with the first `--hours` hours of every model
+set (ECMWF, GFS, Météo-France/ICON) plus best-match tide and sea temperature:
+
+  archive/YYYY/MM/YYYY-MM-DDTHHMMZ.json
+
+Comparing these snapshots with field observations (Diário do Mar) gives forecast error
+by model, beach and lead time. Runs in GitHub Actions twice a day; standard library only.
+
+  python tools/archive_forecast.py            # writes into ./archive
+  python tools/archive_forecast.py --hours 96 --out /tmp/archive
+"""
+
+import argparse
+import json
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+
+# Keep in sync with js/data.js
+MARINE_POINT = (-29.37, -49.67)       # ~5 km offshore of Praia Grande
+WIND_POINT = (-29.347, -49.727)       # Praia Grande shoreline
+TZ = "America/Sao_Paulo"
+MODEL_SETS = [
+    ("ecmwf", "ecmwf_wam025", "ecmwf_ifs025"),
+    ("gfs", "ncep_gfswave025", "gfs_seamless"),
+    ("mf", "meteofrance_wave", "icon_seamless"),
+]
+MARINE_VARS = [
+    "wave_height", "wave_direction", "wave_period", "wave_peak_period",
+    "wind_wave_height", "wind_wave_direction", "wind_wave_period", "wind_wave_peak_period",
+    "swell_wave_height", "swell_wave_direction", "swell_wave_period", "swell_wave_peak_period",
+    "secondary_swell_wave_height", "secondary_swell_wave_direction", "secondary_swell_wave_period",
+]
+MARINE_MIN = ["wave_height", "wave_direction", "wave_period"]
+WIND_VARS = ["wind_speed_10m", "wind_direction_10m", "wind_gusts_10m"]
+
+
+def get_json(url, retries=3):
+    for attempt in range(retries + 1):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 400 or attempt == retries:
+                raise
+            time.sleep(30 if exc.code == 429 else 5 * (attempt + 1))
+        except urllib.error.URLError:
+            if attempt == retries:
+                raise
+            time.sleep(5 * (attempt + 1))
+
+
+def marine_url(model, variables, days):
+    q = {"latitude": MARINE_POINT[0], "longitude": MARINE_POINT[1], "timezone": TZ,
+         "forecast_days": days, "hourly": ",".join(variables)}
+    if model:
+        q["models"] = model
+    return "https://marine-api.open-meteo.com/v1/marine?" + urllib.parse.urlencode(q)
+
+
+def wind_url(model, days):
+    q = {"latitude": WIND_POINT[0], "longitude": WIND_POINT[1], "timezone": TZ, "forecast_days": days,
+         "hourly": ",".join(WIND_VARS), "wind_speed_unit": "ms", "models": model}
+    return "https://api.open-meteo.com/v1/forecast?" + urllib.parse.urlencode(q)
+
+
+def trim(hourly, hours, digits=2):
+    """Keep the first `hours` steps; round numbers to shrink the archive."""
+    out = {}
+    for k, v in hourly.items():
+        v = v[:hours]
+        out[k] = v if k == "time" else [None if x is None else round(x, digits) for x in v]
+    return out
+
+
+def fetch_marine(model, days, hours):
+    try:
+        data = get_json(marine_url(model, MARINE_VARS, days))
+    except urllib.error.HTTPError:
+        data = get_json(marine_url(model, MARINE_MIN, days))
+    return trim(data["hourly"], hours)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--hours", type=int, default=72, help="forecast hours to keep (default 72)")
+    ap.add_argument("--out", type=Path, default=Path(__file__).resolve().parents[1] / "archive")
+    args = ap.parse_args()
+    days = min(16, args.hours // 24 + 1)
+
+    now = datetime.now(timezone.utc)
+    snapshot = {
+        "issued_utc": now.strftime("%Y-%m-%dT%H:%MZ"),
+        "timezone": TZ,
+        "marine_point": MARINE_POINT,
+        "wind_point": WIND_POINT,
+        "models": {},
+        "errors": {},
+    }
+    for key, wave_model, wind_model in MODEL_SETS:
+        entry = {"wave_model": wave_model, "wind_model": wind_model}
+        try:
+            entry["waves"] = fetch_marine(wave_model, days, args.hours)
+        except Exception as exc:  # keep the other models if one fails
+            snapshot["errors"][f"{key}_waves"] = str(exc)
+        try:
+            entry["wind"] = trim(get_json(wind_url(wind_model, days))["hourly"], args.hours)
+        except Exception as exc:
+            snapshot["errors"][f"{key}_wind"] = str(exc)
+        snapshot["models"][key] = entry
+
+    try:
+        base = get_json(marine_url(None, ["sea_level_height_msl", "sea_surface_temperature"], days))
+        snapshot["sea"] = trim(base["hourly"], args.hours)
+    except Exception as exc:
+        snapshot["errors"]["sea"] = str(exc)
+
+    ok = [k for k, m in snapshot["models"].items() if "waves" in m and "wind" in m]
+    if not ok:
+        raise SystemExit(f"No model set could be downloaded: {snapshot['errors']}")
+
+    path = args.out / now.strftime("%Y") / now.strftime("%m") / now.strftime("%Y-%m-%dT%H%MZ.json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(snapshot, separators=(",", ":")))
+    print(f"Wrote {path} ({path.stat().st_size / 1024:.0f} kB); models: {', '.join(ok)}"
+          + (f"; errors: {list(snapshot['errors'])}" if snapshot["errors"] else ""))
+
+
+if __name__ == "__main__":
+    main()

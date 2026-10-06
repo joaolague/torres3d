@@ -10,6 +10,7 @@ O que aparece na cena:
 - Vento em 3D no estilo Windy: partículas transportadas pelo campo previsto, com perfil logarítmico na vertical, rugosidade diferente para mar e terra e soerguimento sobre o relevo.
 - Três conjuntos de modelos (ECMWF WAM + IFS, NOAA GFS-Wave + GFS, Météo-France MFWAM + DWD ICON) e o consenso entre eles, com seletor no estilo Windy.
 - Escala de confiança por hora (alta, média, baixa), calculada a partir da concordância entre os modelos em altura, direção das ondas e vento; o meteograma da linha do tempo mostra a faixa de dispersão de Hs.
+- Índice de surfe v0 (0 a 5, mesma escala do Diário do Mar): altura de quebra (Komar & Gaughan), período, direção do swell, vento terral/lateral/maral e mar de vento. Heurístico e ainda não calibrado.
 - Linha do tempo de 7 dias (hora a hora) com meteograma, nível do mar (maré + componente meteorológica) e temperatura da água.
 - Modo "cenário manual", com presets (ressaca de sul, nordestão, swell de leste com terral, mar calmo), para demonstrações e estudos de caso.
 - Camadas: mapa de Hs costeiro, setas de swell, nomes das praias, exagero vertical e câmeras pré-definidas (Praia Grande, Guarita, Molhes, Ilha dos Lobos).
@@ -70,6 +71,12 @@ Escolhas e limitações, para deixar claro em qualquer apresentação:
 6. Os morros e a barra do Mampituba foram posicionados a partir do DEM. Os nomes das praias e a Ilha dos Lobos (ausente no DEM e inserida como feição simplificada) têm posição aproximada.
 7. O Copernicus DEM é um modelo de superfície (DSM): prédios e vegetação aparecem como relevo.
 
+## Validação e calibração
+
+- `tools/archive_forecast.py` + `.github/workflows/archive-forecast.yml`: duas vezes por dia (06:40 e 18:40 UTC) o GitHub Actions salva as primeiras 72 h de cada conjunto de modelos em `archive/AAAA/MM/`. Também pode ser disparado à mão em Actions → "Arquivar previsões" → Run workflow.
+- Observações de campo: questionário "Diário do Mar" (claude.ai), com altura, qualidade 0–5, vento, maré, tipo de quebra e fotos.
+- Cruzando os dois: erro de cada modelo por praia e por antecedência, e ajuste dos pesos do índice de surfe.
+
 ## Estrutura
 
 ```
@@ -81,7 +88,9 @@ js/ocean.js    shaders do oceano
 js/wind.js     campo de vento e partículas
 js/data.js     Open-Meteo e cenários manuais
 js/main.js     cena, interface e loop
+js/surf.js     índice de surfe v0
 tools/build_terrain.py
+tools/archive_forecast.py
 ```
 
 ## Roadmap sugerido

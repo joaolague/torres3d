@@ -72,6 +72,11 @@ select option { background: var(--panel-solid); }
 .big em { font-style: normal; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
 .big span.dir-cell { font-size: 15px; display: flex; align-items: center; gap: 4px; padding-top: 4px; }
 .dir-arrow { width: 16px; height: 16px; display: inline-block; }
+.surf-row { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.surf-badge { min-width: 44px; height: 32px; border-radius: 4px; display: grid; place-items: center; font-weight: 700; font-size: 17px;
+  color: #101417; background: var(--panel-hi); font-variant-numeric: tabular-nums; }
+.surf-txt { min-width: 0; }
+.surf-txt b { font-size: 13px; }
 #d-parts { width: 100%; border-collapse: collapse; margin: 4px 0 8px; font-variant-numeric: tabular-nums; font-size: 12px; }
 #d-parts td { padding: 3px 0; border-top: 1px solid var(--line); text-align: right; }
 #d-parts td:first-child { text-align: left; color: var(--muted); }

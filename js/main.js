@@ -7,6 +7,7 @@ import { buildTerrain, createTerrainMesh, createDepthTexture, coastToWorld } fro
 import { buildComponents, buildPhaseTexture } from './spectrum.js';
 import { createOcean, createSurroundings } from './ocean.js';
 import { WindField, windColor } from './wind.js';
+import { surfIndex, surfColor } from './surf.js';
 import { fetchForecast, SCENARIOS, MODEL_SETS, scenarioToHour, hourToPartitions, compassLabel } from './data.js';
 
 const $ = (id) => document.getElementById(id);
@@ -196,6 +197,17 @@ function updateDetail(h) {
   $('d-dir').innerHTML = dirTxt(w.total.dir);
   const row = (key, name, p) => (p?.hs == null || p.hs < 0.05) ? '' :
     `<tr><td><i style="background:${PART_COLORS[key]}"></i>${name}</td><td>${fmt(p.hs)} m</td><td>${fmt(p.tp, 0)} s</td><td>${dirTxt(p.dir)}</td></tr>`;
+  const si = surfIndex(h);
+  const badge = $('d-surf');
+  badge.textContent = si ? si.score.toFixed(1).replace('.', ',') : '–';
+  badge.style.background = si ? surfColor(si.score) : '';
+  $('d-surf-label').textContent = si ? `Surfe: ${si.label}` : 'Índice de surfe';
+  let range = '';
+  if (si && state.mode === 'live') {
+    const all = Object.values(state.forecast.hours[state.hourIndex].models).map(surfIndex).filter(Boolean).map((x) => x.score);
+    if (all.length > 1) range = ` · modelos ${Math.min(...all).toFixed(1)}–${Math.max(...all).toFixed(1)}`.replace(/\./g, ',');
+  }
+  $('d-surf-sub').textContent = si ? `Quebra ~${fmt(si.hb)} m · vento ${si.windKind}${range} · v0, não calibrado` : '';
   $('d-parts').innerHTML = row('swell1', 'Swell 1', w.swell1) + row('swell2', 'Swell 2', w.swell2) + row('windsea', 'Mar de vento', w.windsea);
   const c = h.wind.center;
   $('d-wind').innerHTML = `${spd(c.speed)} · ${dirTxt(c.dir)}`;
@@ -300,7 +312,7 @@ function drawMeteogram() {
   const hours = state.forecast.hours;
   const n = hours.length;
   const X = (i) => ((i + 0.5) / n) * w;
-  const top = 14, confH = 4, windH = 5, plotB = h - confH - windH - 4;
+  const top = 14, confH = 4, windH = 4, surfH = 5, plotB = h - confH - windH - surfH - 5;
   const sel = (hr) => (state.model !== 'consensus' && hr.models[state.model]) || hr.consensus;
   const hsMax = Math.max(1, ...hours.map((hr) => hr.spread.hs.max)) * 1.1;
   const Y = (v) => plotB - (v / hsMax) * (plotB - top);
@@ -312,7 +324,7 @@ function drawMeteogram() {
     g.beginPath(); g.moveTo(0, Y(v)); g.lineTo(w, Y(v)); g.stroke();
     g.fillText(`${v}`, 4, Y(v) - 2);
   }
-  g.fillText('Hs (m) · faixa azul: dispersão entre modelos · barras: vento e confiança', w > 520 ? 40 : 4, 10);
+  g.fillText('Hs (m) · faixa azul: dispersão entre modelos · barras: surfe, vento, confiança', w > 520 ? 40 : 4, 10);
 
   // model spread band
   g.beginPath();
@@ -328,11 +340,14 @@ function drawMeteogram() {
   // wind strip (selected model) and confidence strip
   const bw = w / n + 0.5, c = [0, 0, 0];
   hours.forEach((hr, i) => {
+    const si = surfIndex(sel(hr));
+    g.fillStyle = si ? surfColor(si.score) : 'rgba(255,255,255,0.1)';
+    g.fillRect((i / n) * w, plotB + 2, bw, surfH);
     windColor(sel(hr).wind.center.speed, c);
     g.fillStyle = `rgb(${c.map((x) => Math.round(x * 255)).join(',')})`;
-    g.fillRect((i / n) * w, plotB + 2, bw, windH);
+    g.fillRect((i / n) * w, plotB + 3 + surfH, bw, windH);
     g.fillStyle = CONF_COLOR[hr.spread.level] || 'rgba(255,255,255,0.2)';
-    g.fillRect((i / n) * w, plotB + 3 + windH, bw, confH);
+    g.fillRect((i / n) * w, plotB + 4 + surfH + windH, bw, confH);
   });
 }
 
