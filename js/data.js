@@ -88,6 +88,7 @@ async function fetchMarine(model, days) {
   try {
     return await getJSON(base + MARINE_FULL.join(','));
   } catch (err) {
+    if (err.status === 429) throw err; // rate-limited: retrying only burns more quota
     console.warn(`Marine ${model || 'best_match'}: full request failed, retrying minimal`, err);
     return getJSON(base + MARINE_MIN.join(','));
   }
