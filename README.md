@@ -29,7 +29,7 @@ Parâmetros de URL:
 - `?q=alta|media|baixa`: resolução da malha do oceano e número de partículas. O padrão é `media` em celulares.
 - `?cam=Guarita`: abre direto numa câmera pré-definida.
 
-Versão publicada: **https://joaolague.github.io/torres3d/** (GitHub Pages, branch `gh-pages`). Para publicar uma atualização, envie o mesmo commit para a branch `gh-pages` (`git push origin main:gh-pages`).
+Versão publicada: **https://joaolague.github.io/torres3d/** (GitHub Pages, branch `gh-pages`). Para publicar uma atualização: `python tools/stamp_version.py` (força os navegadores a baixarem os arquivos novos), commit e `git push origin main && git push origin main:gh-pages`.
 
 ### Relevo
 

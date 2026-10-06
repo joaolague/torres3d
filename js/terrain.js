@@ -148,7 +148,8 @@ async function loadTerrainJSON() {
   }
   let rgb = null;
   if (j.imagery) {
-    try { rgb = await loadImagery('data/' + j.imagery, g.nx, g.ny); } catch (err) { console.warn('imagery unavailable', err); }
+    const v = document.querySelector('meta[name="app-version"]')?.content;
+    try { rgb = await loadImagery('data/' + j.imagery + (v ? '?v=' + v : ''), g.nx, g.ny); } catch (err) { console.warn('imagery unavailable', err); }
   }
   return {
     source: j.source || 'terrain.json',
